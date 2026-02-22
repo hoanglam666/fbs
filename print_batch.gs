@@ -165,13 +165,14 @@ function fillTemplateCells_(sheet, blockStartRow, job) {
 
 function exportJobsToPdfA6Landscape_(templateSheet, jobs) {
   const tempSs = SpreadsheetApp.create(`TMP_PRINT_${Date.now()}`);
-  const workingSheet = tempSs.getSheets()[0];
 
-  // KHÔNG xóa sheet cuối cùng vì Google Sheets sẽ báo lỗi.
-  // Dùng sheet mặc định làm trang đầu, các trang sau thì copy thêm từ template.
-  copyTemplateToExistingSheet_(templateSheet, workingSheet);
-  workingSheet.setName('Tem_1');
-  fillTemplateCells_(workingSheet, 1, jobs[0]);
+  // Tạo trước sheet trang 1 từ template, sau đó mới xóa sheet mặc định.
+  // Cách này tránh lỗi xóa sheet cuối cùng và cũng tránh copy Range chéo spreadsheet.
+  const firstPage = templateSheet.copyTo(tempSs).setName('Tem_1');
+  fillTemplateCells_(firstPage, 1, jobs[0]);
+
+  const defaultSheet = tempSs.getSheets().find((sh) => sh.getSheetId() !== firstPage.getSheetId());
+  if (defaultSheet) tempSs.deleteSheet(defaultSheet);
 
   for (let i = 1; i < jobs.length; i += 1) {
     const pageSheet = templateSheet.copyTo(tempSs).setName(`Tem_${i + 1}`);
@@ -186,21 +187,6 @@ function exportJobsToPdfA6Landscape_(templateSheet, jobs) {
 
   DriveApp.getFileById(tempSs.getId()).setTrashed(true);
   return pdfFile;
-}
-
-function copyTemplateToExistingSheet_(templateSheet, targetSheet) {
-  targetSheet.clear();
-
-  const tplRange = templateSheet.getRange(CONFIG.TEMPLATE_RANGE_A1);
-  const targetRange = targetSheet.getRange(1, 1, tplRange.getNumRows(), tplRange.getNumColumns());
-  tplRange.copyTo(targetRange, SpreadsheetApp.CopyPasteType.PASTE_NORMAL, false);
-
-  for (let c = 1; c <= tplRange.getNumColumns(); c += 1) {
-    targetSheet.setColumnWidth(c, templateSheet.getColumnWidth(c));
-  }
-  for (let r = 1; r <= CONFIG.BLOCK_HEIGHT; r += 1) {
-    targetSheet.setRowHeight(r, templateSheet.getRowHeight(r));
-  }
 }
 
 function exportSpreadsheetAsPdfBlob_(spreadsheetId, fileName) {

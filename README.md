@@ -38,4 +38,5 @@ Sheet `Table_FBS` cần có các cột (hỗ trợ nhiều biến thể tên c�
 
 
 ## Sửa lỗi đã gặp
-- Đã sửa lỗi `Bạn không thể xóa tất cả trang tính trong tài liệu` khi xuất PDF bằng cách giữ lại sheet mặc định trong file tạm và dùng sheet đó làm trang đầu tiên.
+- Đã sửa lỗi `Bạn không thể xóa tất cả trang tính trong tài liệu` khi xuất PDF bằng cách tạo trước sheet từ `Mau_in`, sau đó mới xóa sheet mặc định.
+- Đã sửa lỗi `Dải ô đích và dải ô nguồn phải trên cùng một bảng tính` bằng cách không copy `Range` giữa hai spreadsheet, thay vào đó copy cả sheet template (`copyTo`).
