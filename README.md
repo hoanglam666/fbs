@@ -35,3 +35,7 @@ Sheet `Table_FBS` cần có các cột (hỗ trợ nhiều biến thể tên c�
 - Insert → Drawing (hoặc Image) → gán script:
   - `inHangLoatVaXuatPdf` (khuyên dùng: vừa tạo sheet vừa xuất PDF)
   - hoặc `inHangLoatTheoMau`
+
+
+## Sửa lỗi đã gặp
+- Đã sửa lỗi `Bạn không thể xóa tất cả trang tính trong tài liệu` khi xuất PDF bằng cách giữ lại sheet mặc định trong file tạm và dùng sheet đó làm trang đầu tiên.
