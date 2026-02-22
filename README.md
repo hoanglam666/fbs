@@ -6,12 +6,14 @@ File `print_batch.gs` hỗ trợ:
 
 ## Đã chỉnh theo mẫu thực tế
 Script đang map theo đúng layout mẫu bạn gửi:
-- Vùng template: `A1:E10`
+- Vùng template: `A1:E11`
 - `Mã Đơn` -> ô `B3`
 - `Supplier name` -> ô `B4`
 - `Mã Thùng` -> ô `C5` (dạng `trang hiện tại / tổng`)
 - Dòng dữ liệu -> `A8:E8`
 - Tổng -> `E9`
+- Người in -> `B11` (tự động lấy tài khoản đang chạy script)
+- Ngày in -> `D11` (tự động lấy thời gian hiện tại)
 
 ## Cột dữ liệu đầu vào
 Sheet `Table_FBS` cần có các cột (hỗ trợ nhiều biến thể tên cột):

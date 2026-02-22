@@ -6,9 +6,9 @@ const CONFIG = {
   TEMPLATE_SHEET: 'Mau_in',
   OUTPUT_SHEET: 'IN_HANG_LOAT',
 
-  // Mặc định theo mẫu trong ảnh user gửi: A6 ngang, vùng A1:E10.
-  TEMPLATE_RANGE_A1: 'A1:E10',
-  BLOCK_HEIGHT: 10,
+  // Mặc định theo mẫu trong ảnh user gửi: A6 ngang, vùng A1:E11.
+  TEMPLATE_RANGE_A1: 'A1:E11',
+  BLOCK_HEIGHT: 11,
 
   // Header aliases để đọc dữ liệu bền vững (không phụ thuộc hoa/thường/dấu/_/space).
   HEADERS: {
@@ -31,6 +31,8 @@ const CONFIG = {
     phanLoai: 'D8',
     sl: 'E8',
     tong: 'E9',
+    nguoiIn: 'B11',
+    ngayIn: 'D11',
   },
 
   PDF: {
@@ -59,10 +61,12 @@ function inHangLoatVaXuatPdf() {
     return;
   }
 
-  const out = recreateOutputSheet_(ss, CONFIG.OUTPUT_SHEET);
-  renderBatch_(templateSheet, out, jobs);
+  const runContext = createRunContext_();
 
-  const pdfFile = exportJobsToPdfA6Landscape_(templateSheet, jobs);
+  const out = recreateOutputSheet_(ss, CONFIG.OUTPUT_SHEET);
+  renderBatch_(templateSheet, out, jobs, runContext);
+
+  const pdfFile = exportJobsToPdfA6Landscape_(templateSheet, jobs, runContext);
   showPdfDialog_(pdfFile.getUrl(), pdfFile.getName(), jobs.length);
 }
 
@@ -77,8 +81,10 @@ function inHangLoatTheoMau() {
     return;
   }
 
+  const runContext = createRunContext_();
+
   const out = recreateOutputSheet_(ss, CONFIG.OUTPUT_SHEET);
-  renderBatch_(templateSheet, out, jobs);
+  renderBatch_(templateSheet, out, jobs, runContext);
 
   SpreadsheetApp.getUi().alert(
     `Đã tạo ${jobs.length} trang in tại sheet "${CONFIG.OUTPUT_SHEET}".
@@ -132,7 +138,7 @@ function buildPrintJobs_() {
   return jobs;
 }
 
-function renderBatch_(templateSheet, outSheet, jobs) {
+function renderBatch_(templateSheet, outSheet, jobs, runContext) {
   const tplRange = templateSheet.getRange(CONFIG.TEMPLATE_RANGE_A1);
 
   for (let c = 1; c <= tplRange.getNumColumns(); c += 1) {
@@ -148,11 +154,11 @@ function renderBatch_(templateSheet, outSheet, jobs) {
       outSheet.setRowHeight(blockStart + rr, templateSheet.getRowHeight(rr + 1));
     }
 
-    fillTemplateCells_(outSheet, blockStart, job);
+    fillTemplateCells_(outSheet, blockStart, job, runContext);
   });
 }
 
-function fillTemplateCells_(sheet, blockStartRow, job) {
+function fillTemplateCells_(sheet, blockStartRow, job, runContext) {
   setCellInBlock_(sheet, blockStartRow, CONFIG.CELLS.maDon, job.maDon);
   setCellInBlock_(sheet, blockStartRow, CONFIG.CELLS.supplier, job.supplier);
   setCellInBlock_(sheet, blockStartRow, CONFIG.CELLS.maThung, `${job.soTrang} / ${job.tongKien}`);
@@ -161,22 +167,26 @@ function fillTemplateCells_(sheet, blockStartRow, job) {
   setCellInBlock_(sheet, blockStartRow, CONFIG.CELLS.phanLoai, job.phanLoai);
   setCellInBlock_(sheet, blockStartRow, CONFIG.CELLS.sl, job.sl);
   setCellInBlock_(sheet, blockStartRow, CONFIG.CELLS.tong, job.sl);
+  if (runContext) {
+    setCellInBlock_(sheet, blockStartRow, CONFIG.CELLS.nguoiIn, `Người in: ${runContext.printedBy}`);
+    setCellInBlock_(sheet, blockStartRow, CONFIG.CELLS.ngayIn, `Ngày in: ${runContext.printedAt}`);
+  }
 }
 
-function exportJobsToPdfA6Landscape_(templateSheet, jobs) {
+function exportJobsToPdfA6Landscape_(templateSheet, jobs, runContext) {
   const tempSs = SpreadsheetApp.create(`TMP_PRINT_${Date.now()}`);
 
   // Tạo trước sheet trang 1 từ template, sau đó mới xóa sheet mặc định.
   // Cách này tránh lỗi xóa sheet cuối cùng và cũng tránh copy Range chéo spreadsheet.
   const firstPage = templateSheet.copyTo(tempSs).setName('Tem_1');
-  fillTemplateCells_(firstPage, 1, jobs[0]);
+  fillTemplateCells_(firstPage, 1, jobs[0], runContext);
 
   const defaultSheet = tempSs.getSheets().find((sh) => sh.getSheetId() !== firstPage.getSheetId());
   if (defaultSheet) tempSs.deleteSheet(defaultSheet);
 
   for (let i = 1; i < jobs.length; i += 1) {
     const pageSheet = templateSheet.copyTo(tempSs).setName(`Tem_${i + 1}`);
-    fillTemplateCells_(pageSheet, 1, jobs[i]);
+    fillTemplateCells_(pageSheet, 1, jobs[i], runContext);
   }
 
   SpreadsheetApp.flush();
@@ -233,6 +243,16 @@ function showPdfDialog_(fileUrl, fileName, pageCount) {
       `</div>`
   ).setWidth(420).setHeight(180);
   SpreadsheetApp.getUi().showModalDialog(html, 'Xuất PDF A6 ngang thành công');
+}
+
+
+function createRunContext_() {
+  const tz = Session.getScriptTimeZone();
+  const printedAt = Utilities.formatDate(new Date(), tz, 'HH:mm dd/MM/yyyy');
+  const activeUser = Session.getActiveUser().getEmail();
+  const effectiveUser = Session.getEffectiveUser().getEmail();
+  const printedBy = activeUser || effectiveUser || 'Không xác định';
+  return { printedAt, printedBy };
 }
 
 function formatDateTime_(date) {
