@@ -6,28 +6,33 @@ const CONFIG = {
   TEMPLATE_SHEET: 'Mau_in',
   OUTPUT_SHEET: 'IN_HANG_LOAT',
 
-  TEMPLATE_RANGE_A1: 'A1:H12',
-  BLOCK_HEIGHT: 12,
+  // Mặc định theo mẫu trong ảnh user gửi: A6 ngang, vùng A1:E11.
+  TEMPLATE_RANGE_A1: 'A1:E11',
+  BLOCK_HEIGHT: 11,
 
+  // Header aliases để đọc dữ liệu bền vững (không phụ thuộc hoa/thường/dấu/_/space).
   HEADERS: {
-    sku: 'Ma_sku',
-    tenSp: 'Ten_sp',
-    phanLoai: 'Phan_loai',
-    soLuong: 'So_luong',
-    maKien: 'Ma_kien',
-    maDon: 'Ma_don',
-    supplier: 'Supplier_name',
+    sku: ['Ma_sku', 'Mã SKU', 'sku'],
+    tenSp: ['Ten_sp', 'Tên hàng', 'Ten hang'],
+    phanLoai: ['Phan_loai', 'Phân loại', 'Phan loai'],
+    soLuong: ['So_luong', 'Số lượng', 'So luong'],
+    maKien: ['Ma_kien', 'Mã kiện', 'Ma kien'],
+    maDon: ['Ma_don', 'Mã đơn', 'Ma don'],
+    supplier: ['Supplier_name', 'Supplier name', 'Supplier'],
   },
 
+  // Toạ độ ô theo đúng layout mẫu trong ảnh.
   CELLS: {
-    maDon: 'C3',
-    supplier: 'C4',
-    maThung: 'E5',
-    sku: 'A9',
-    tenSp: 'B9',
-    phanLoai: 'G9',
-    sl: 'H9',
-    tong: 'H10',
+    maDon: 'B3',
+    supplier: 'B4',
+    maThung: 'C5',
+    sku: 'A8',
+    tenSp: 'B8',
+    phanLoai: 'D8',
+    sl: 'E8',
+    tong: 'E9',
+    nguoiIn: 'B11',
+    ngayIn: 'D11',
   },
 
   PDF: {
@@ -56,10 +61,12 @@ function inHangLoatVaXuatPdf() {
     return;
   }
 
-  const out = recreateOutputSheet_(ss, CONFIG.OUTPUT_SHEET);
-  renderBatch_(templateSheet, out, jobs);
+  const runContext = createRunContext_();
 
-  const pdfFile = exportJobsToPdfA6Landscape_(templateSheet, jobs);
+  const out = recreateOutputSheet_(ss, CONFIG.OUTPUT_SHEET);
+  renderBatch_(templateSheet, out, jobs, runContext);
+
+  const pdfFile = exportJobsToPdfA6Landscape_(templateSheet, jobs, runContext);
   showPdfDialog_(pdfFile.getUrl(), pdfFile.getName(), jobs.length);
 }
 
@@ -74,11 +81,14 @@ function inHangLoatTheoMau() {
     return;
   }
 
+  const runContext = createRunContext_();
+
   const out = recreateOutputSheet_(ss, CONFIG.OUTPUT_SHEET);
-  renderBatch_(templateSheet, out, jobs);
+  renderBatch_(templateSheet, out, jobs, runContext);
 
   SpreadsheetApp.getUi().alert(
-    `Đã tạo ${jobs.length} trang in tại sheet "${CONFIG.OUTPUT_SHEET}".\n` +
+    `Đã tạo ${jobs.length} trang in tại sheet "${CONFIG.OUTPUT_SHEET}".
+` +
       'Bạn có thể Ctrl+P để in hoặc dùng menu tạo PDF A6 ngang.'
   );
 }
@@ -91,21 +101,21 @@ function buildPrintJobs_() {
   const data = dataSheet.getDataRange().getValues();
   if (data.length < 2) return [];
 
-  const headers = data[0].map((h) => String(h).trim());
+  const headers = data[0].map((h) => String(h || ''));
   const idx = createHeaderIndex_(headers);
 
   const jobs = [];
   for (let r = 1; r < data.length; r += 1) {
     const row = data[r];
-    const sku = String(getByHeader_(row, idx, CONFIG.HEADERS.sku));
+    const sku = String(getByHeaderAliases_(row, idx, CONFIG.HEADERS.sku) || '');
     if (!sku) continue;
 
-    const tongKien = Number(getByHeader_(row, idx, CONFIG.HEADERS.maKien)) || 0;
-    const soLuong = Number(getByHeader_(row, idx, CONFIG.HEADERS.soLuong)) || 0;
-    const tenSp = String(getByHeader_(row, idx, CONFIG.HEADERS.tenSp) || '');
-    const phanLoai = String(getByHeader_(row, idx, CONFIG.HEADERS.phanLoai) || '');
-    const maDon = String(getByHeader_(row, idx, CONFIG.HEADERS.maDon) || '');
-    const supplier = String(getByHeader_(row, idx, CONFIG.HEADERS.supplier) || '');
+    const tongKien = Number(getByHeaderAliases_(row, idx, CONFIG.HEADERS.maKien)) || 0;
+    const soLuong = Number(getByHeaderAliases_(row, idx, CONFIG.HEADERS.soLuong)) || 0;
+    const tenSp = String(getByHeaderAliases_(row, idx, CONFIG.HEADERS.tenSp) || '');
+    const phanLoai = String(getByHeaderAliases_(row, idx, CONFIG.HEADERS.phanLoai) || '');
+    const maDon = String(getByHeaderAliases_(row, idx, CONFIG.HEADERS.maDon) || '');
+    const supplier = String(getByHeaderAliases_(row, idx, CONFIG.HEADERS.supplier) || '');
 
     if (tongKien <= 0) continue;
 
@@ -128,7 +138,7 @@ function buildPrintJobs_() {
   return jobs;
 }
 
-function renderBatch_(templateSheet, outSheet, jobs) {
+function renderBatch_(templateSheet, outSheet, jobs, runContext) {
   const tplRange = templateSheet.getRange(CONFIG.TEMPLATE_RANGE_A1);
 
   for (let c = 1; c <= tplRange.getNumColumns(); c += 1) {
@@ -144,11 +154,11 @@ function renderBatch_(templateSheet, outSheet, jobs) {
       outSheet.setRowHeight(blockStart + rr, templateSheet.getRowHeight(rr + 1));
     }
 
-    fillTemplateCells_(outSheet, blockStart, job);
+    fillTemplateCells_(outSheet, blockStart, job, runContext);
   });
 }
 
-function fillTemplateCells_(sheet, blockStartRow, job) {
+function fillTemplateCells_(sheet, blockStartRow, job, runContext) {
   setCellInBlock_(sheet, blockStartRow, CONFIG.CELLS.maDon, job.maDon);
   setCellInBlock_(sheet, blockStartRow, CONFIG.CELLS.supplier, job.supplier);
   setCellInBlock_(sheet, blockStartRow, CONFIG.CELLS.maThung, `${job.soTrang} / ${job.tongKien}`);
@@ -157,17 +167,27 @@ function fillTemplateCells_(sheet, blockStartRow, job) {
   setCellInBlock_(sheet, blockStartRow, CONFIG.CELLS.phanLoai, job.phanLoai);
   setCellInBlock_(sheet, blockStartRow, CONFIG.CELLS.sl, job.sl);
   setCellInBlock_(sheet, blockStartRow, CONFIG.CELLS.tong, job.sl);
+  if (runContext) {
+    setCellInBlock_(sheet, blockStartRow, CONFIG.CELLS.nguoiIn, `Người in: ${runContext.printedBy}`);
+    setCellInBlock_(sheet, blockStartRow, CONFIG.CELLS.ngayIn, `Ngày in: ${runContext.printedAt}`);
+  }
 }
 
-function exportJobsToPdfA6Landscape_(templateSheet, jobs) {
+function exportJobsToPdfA6Landscape_(templateSheet, jobs, runContext) {
   const tempSs = SpreadsheetApp.create(`TMP_PRINT_${Date.now()}`);
-  const defaultSheet = tempSs.getSheets()[0];
-  tempSs.deleteSheet(defaultSheet);
 
-  jobs.forEach((job, i) => {
+  // Tạo trước sheet trang 1 từ template, sau đó mới xóa sheet mặc định.
+  // Cách này tránh lỗi xóa sheet cuối cùng và cũng tránh copy Range chéo spreadsheet.
+  const firstPage = templateSheet.copyTo(tempSs).setName('Tem_1');
+  fillTemplateCells_(firstPage, 1, jobs[0], runContext);
+
+  const defaultSheet = tempSs.getSheets().find((sh) => sh.getSheetId() !== firstPage.getSheetId());
+  if (defaultSheet) tempSs.deleteSheet(defaultSheet);
+
+  for (let i = 1; i < jobs.length; i += 1) {
     const pageSheet = templateSheet.copyTo(tempSs).setName(`Tem_${i + 1}`);
-    fillTemplateCells_(pageSheet, 1, job);
-  });
+    fillTemplateCells_(pageSheet, 1, jobs[i], runContext);
+  }
 
   SpreadsheetApp.flush();
 
@@ -225,6 +245,16 @@ function showPdfDialog_(fileUrl, fileName, pageCount) {
   SpreadsheetApp.getUi().showModalDialog(html, 'Xuất PDF A6 ngang thành công');
 }
 
+
+function createRunContext_() {
+  const tz = Session.getScriptTimeZone();
+  const printedAt = Utilities.formatDate(new Date(), tz, 'HH:mm dd/MM/yyyy');
+  const activeUser = Session.getActiveUser().getEmail();
+  const effectiveUser = Session.getEffectiveUser().getEmail();
+  const printedBy = activeUser || effectiveUser || 'Không xác định';
+  return { printedAt, printedBy };
+}
+
 function formatDateTime_(date) {
   return Utilities.formatDate(date, Session.getScriptTimeZone(), 'yyyyMMdd_HHmmss');
 }
@@ -257,13 +287,23 @@ function recreateOutputSheet_(ss, name) {
 
 function createHeaderIndex_(headers) {
   return headers.reduce((acc, h, i) => {
-    acc[String(h).trim()] = i;
+    acc[normalizeHeader_(h)] = i;
     return acc;
   }, {});
 }
 
-function getByHeader_(row, headerIndex, headerName) {
-  const idx = headerIndex[headerName];
-  if (idx === undefined) return '';
-  return row[idx];
+function getByHeaderAliases_(row, headerIndex, aliases) {
+  for (let i = 0; i < aliases.length; i += 1) {
+    const idx = headerIndex[normalizeHeader_(aliases[i])];
+    if (idx !== undefined) return row[idx];
+  }
+  return '';
+}
+
+function normalizeHeader_(text) {
+  return String(text || '')
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-zA-Z0-9]/g, '')
+    .toLowerCase();
 }
