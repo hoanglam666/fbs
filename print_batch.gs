@@ -5,6 +5,7 @@ const CONFIG = {
   DATA_SHEET: 'Table_FBS',
   TEMPLATE_SHEET: 'Mau_in',
   OUTPUT_SHEET: 'IN_HANG_LOAT',
+  OUTPUT_MIN_ROWS: 30000,
 
   // Mặc định theo mẫu trong ảnh user gửi: A6 ngang, vùng A1:E11.
   TEMPLATE_RANGE_A1: 'A1:E11',
@@ -282,7 +283,14 @@ function colToNumber_(col) {
 function recreateOutputSheet_(ss, name) {
   const old = ss.getSheetByName(name);
   if (old) ss.deleteSheet(old);
-  return ss.insertSheet(name);
+
+  const sheet = ss.insertSheet(name);
+  const missingRows = CONFIG.OUTPUT_MIN_ROWS - sheet.getMaxRows();
+  if (missingRows > 0) {
+    sheet.insertRowsAfter(sheet.getMaxRows(), missingRows);
+  }
+
+  return sheet;
 }
 
 function createHeaderIndex_(headers) {
