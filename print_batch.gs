@@ -66,12 +66,11 @@ function inHangLoatVaXuatPdf() {
 
   const startedAt = Date.now();
   const out = recreateOutputSheet_(ss, CONFIG.OUTPUT_SHEET);
-  const renderedArea = renderBatch_(templateSheet, out, jobs, runContext);
+  renderBatch_(templateSheet, out, jobs, runContext);
   const renderSeconds = ((Date.now() - startedAt) / 1000).toFixed(2);
 
   const fileName = `${CONFIG.PDF.filePrefix}_${formatDateTime_(new Date())}.pdf`;
-  const blob = exportSheetAsPdfBlob_(ss.getId(), out.getSheetId(), fileName, renderedArea);
-  const pdfFile = DriveApp.createFile(blob);
+  const pdfFile = exportRenderedSheetToPdf_(out, fileName);
   showPdfDialog_(pdfFile.getUrl(), pdfFile.getName(), jobs.length, renderSeconds);
 }
 
@@ -164,7 +163,6 @@ function renderBatch_(templateSheet, outSheet, jobs, runContext) {
   jobs.forEach((job, i) => fillTemplateValuesInMemory_(values, i * tplRows, job, runContext));
   targetRange.setValues(values);
 
-  return { totalRows, totalCols: tplCols };
 }
 
 function fillTemplateValuesInMemory_(values, blockStartIndex, job, runContext) {
@@ -189,28 +187,33 @@ function setValueInMemory_(values, blockStartIndex, cellA1, value) {
   values[rowIndex][colIndex] = value;
 }
 
-function exportSheetAsPdfBlob_(spreadsheetId, sheetId, fileName, renderedArea) {
+function exportRenderedSheetToPdf_(renderedSheet, fileName) {
+  const tempSs = SpreadsheetApp.create(`TMP_PRINT_${Date.now()}`);
+  const copiedSheet = renderedSheet.copyTo(tempSs).setName(CONFIG.OUTPUT_SHEET);
+
+  const defaultSheet = tempSs.getSheets().find((sh) => sh.getSheetId() !== copiedSheet.getSheetId());
+  if (defaultSheet) tempSs.deleteSheet(defaultSheet);
+
+  SpreadsheetApp.flush();
+
+  const blob = exportSpreadsheetAsPdfBlob_(tempSs.getId(), fileName);
+  const pdfFile = DriveApp.createFile(blob);
+  DriveApp.getFileById(tempSs.getId()).setTrashed(true);
+  return pdfFile;
+}
+
+function exportSpreadsheetAsPdfBlob_(spreadsheetId, fileName) {
   const base = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/export`;
   const params = {
     format: 'pdf',
-    gid: String(sheetId),
     size: CONFIG.PDF.paperSize,
     portrait: String(!CONFIG.PDF.landscape),
     fitw: 'true',
-    scale: '4',
-    horizontal_alignment: 'CENTER',
-    vertical_alignment: 'TOP',
     sheetnames: 'false',
     printtitle: 'false',
     pagenum: 'UNDEFINED',
     gridlines: 'false',
     fzr: 'false',
-    ir: 'false',
-    ic: 'false',
-    r1: '0',
-    c1: '0',
-    r2: String(renderedArea.totalRows),
-    c2: String(renderedArea.totalCols),
     top_margin: '0.25',
     bottom_margin: '0.25',
     left_margin: '0.25',
