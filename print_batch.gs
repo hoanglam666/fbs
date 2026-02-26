@@ -66,11 +66,11 @@ function inHangLoatVaXuatPdf() {
 
   const startedAt = Date.now();
   const out = recreateOutputSheet_(ss, CONFIG.OUTPUT_SHEET);
-  renderBatch_(templateSheet, out, jobs, runContext);
+  const renderedArea = renderBatch_(templateSheet, out, jobs, runContext);
   const renderSeconds = ((Date.now() - startedAt) / 1000).toFixed(2);
 
   const fileName = `${CONFIG.PDF.filePrefix}_${formatDateTime_(new Date())}.pdf`;
-  const pdfFile = exportRenderedSheetToPdf_(out, fileName);
+  const pdfFile = exportRenderedSheetToPdf_(out, fileName, renderedArea);
   showPdfDialog_(pdfFile.getUrl(), pdfFile.getName(), jobs.length, renderSeconds);
 }
 
@@ -163,6 +163,7 @@ function renderBatch_(templateSheet, outSheet, jobs, runContext) {
   jobs.forEach((job, i) => fillTemplateValuesInMemory_(values, i * tplRows, job, runContext));
   targetRange.setValues(values);
 
+  return { totalRows, totalCols: tplCols };
 }
 
 function fillTemplateValuesInMemory_(values, blockStartIndex, job, runContext) {
@@ -187,12 +188,22 @@ function setValueInMemory_(values, blockStartIndex, cellA1, value) {
   values[rowIndex][colIndex] = value;
 }
 
-function exportRenderedSheetToPdf_(renderedSheet, fileName) {
+function exportRenderedSheetToPdf_(renderedSheet, fileName, renderedArea) {
   const tempSs = SpreadsheetApp.create(`TMP_PRINT_${Date.now()}`);
   const copiedSheet = renderedSheet.copyTo(tempSs).setName(CONFIG.OUTPUT_SHEET);
 
   const defaultSheet = tempSs.getSheets().find((sh) => sh.getSheetId() !== copiedSheet.getSheetId());
   if (defaultSheet) tempSs.deleteSheet(defaultSheet);
+
+  const maxRows = copiedSheet.getMaxRows();
+  if (renderedArea && renderedArea.totalRows < maxRows) {
+    copiedSheet.deleteRows(renderedArea.totalRows + 1, maxRows - renderedArea.totalRows);
+  }
+
+  const maxCols = copiedSheet.getMaxColumns();
+  if (renderedArea && renderedArea.totalCols < maxCols) {
+    copiedSheet.deleteColumns(renderedArea.totalCols + 1, maxCols - renderedArea.totalCols);
+  }
 
   SpreadsheetApp.flush();
 
