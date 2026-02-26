@@ -66,10 +66,12 @@ function inHangLoatVaXuatPdf() {
 
   const startedAt = Date.now();
   const out = recreateOutputSheet_(ss, CONFIG.OUTPUT_SHEET);
-  renderBatch_(templateSheet, out, jobs, runContext);
+  const renderedArea = renderBatch_(templateSheet, out, jobs, runContext);
   const renderSeconds = ((Date.now() - startedAt) / 1000).toFixed(2);
 
-  const pdfFile = exportJobsToPdfA6Landscape_(templateSheet, jobs, runContext);
+  const fileName = `${CONFIG.PDF.filePrefix}_${formatDateTime_(new Date())}.pdf`;
+  const blob = exportSheetAsPdfBlob_(ss.getId(), out.getSheetId(), fileName, renderedArea);
+  const pdfFile = DriveApp.createFile(blob);
   showPdfDialog_(pdfFile.getUrl(), pdfFile.getName(), jobs.length, renderSeconds);
 }
 
@@ -161,21 +163,8 @@ function renderBatch_(templateSheet, outSheet, jobs, runContext) {
   const values = targetRange.getValues();
   jobs.forEach((job, i) => fillTemplateValuesInMemory_(values, i * tplRows, job, runContext));
   targetRange.setValues(values);
-}
 
-function fillTemplateCells_(sheet, blockStartRow, job, runContext) {
-  setCellInBlock_(sheet, blockStartRow, CONFIG.CELLS.maDon, job.maDon);
-  setCellInBlock_(sheet, blockStartRow, CONFIG.CELLS.supplier, job.supplier);
-  setCellInBlock_(sheet, blockStartRow, CONFIG.CELLS.maThung, `${job.soTrang} / ${job.tongKien}`);
-  setCellInBlock_(sheet, blockStartRow, CONFIG.CELLS.sku, job.sku);
-  setCellInBlock_(sheet, blockStartRow, CONFIG.CELLS.tenSp, job.tenSp);
-  setCellInBlock_(sheet, blockStartRow, CONFIG.CELLS.phanLoai, job.phanLoai);
-  setCellInBlock_(sheet, blockStartRow, CONFIG.CELLS.sl, job.sl);
-  setCellInBlock_(sheet, blockStartRow, CONFIG.CELLS.tong, job.sl);
-  if (runContext) {
-    setCellInBlock_(sheet, blockStartRow, CONFIG.CELLS.nguoiIn, `Người in: ${runContext.printedBy}`);
-    setCellInBlock_(sheet, blockStartRow, CONFIG.CELLS.ngayIn, `Ngày in: ${runContext.printedAt}`);
-  }
+  return { totalRows, totalCols: tplCols };
 }
 
 function fillTemplateValuesInMemory_(values, blockStartIndex, job, runContext) {
@@ -200,44 +189,28 @@ function setValueInMemory_(values, blockStartIndex, cellA1, value) {
   values[rowIndex][colIndex] = value;
 }
 
-function exportJobsToPdfA6Landscape_(templateSheet, jobs, runContext) {
-  const tempSs = SpreadsheetApp.create(`TMP_PRINT_${Date.now()}`);
-
-  // Tạo trước sheet trang 1 từ template, sau đó mới xóa sheet mặc định.
-  // Cách này tránh lỗi xóa sheet cuối cùng và cũng tránh copy Range chéo spreadsheet.
-  const firstPage = templateSheet.copyTo(tempSs).setName('Tem_1');
-  fillTemplateCells_(firstPage, 1, jobs[0], runContext);
-
-  const defaultSheet = tempSs.getSheets().find((sh) => sh.getSheetId() !== firstPage.getSheetId());
-  if (defaultSheet) tempSs.deleteSheet(defaultSheet);
-
-  for (let i = 1; i < jobs.length; i += 1) {
-    const pageSheet = templateSheet.copyTo(tempSs).setName(`Tem_${i + 1}`);
-    fillTemplateCells_(pageSheet, 1, jobs[i], runContext);
-  }
-
-  SpreadsheetApp.flush();
-
-  const fileName = `${CONFIG.PDF.filePrefix}_${formatDateTime_(new Date())}.pdf`;
-  const blob = exportSpreadsheetAsPdfBlob_(tempSs.getId(), fileName);
-  const pdfFile = DriveApp.createFile(blob);
-
-  DriveApp.getFileById(tempSs.getId()).setTrashed(true);
-  return pdfFile;
-}
-
-function exportSpreadsheetAsPdfBlob_(spreadsheetId, fileName) {
+function exportSheetAsPdfBlob_(spreadsheetId, sheetId, fileName, renderedArea) {
   const base = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/export`;
   const params = {
     format: 'pdf',
+    gid: String(sheetId),
     size: CONFIG.PDF.paperSize,
     portrait: String(!CONFIG.PDF.landscape),
     fitw: 'true',
+    scale: '4',
+    horizontal_alignment: 'CENTER',
+    vertical_alignment: 'TOP',
     sheetnames: 'false',
     printtitle: 'false',
     pagenum: 'UNDEFINED',
     gridlines: 'false',
     fzr: 'false',
+    ir: 'false',
+    ic: 'false',
+    r1: '0',
+    c1: '0',
+    r2: String(renderedArea.totalRows),
+    c2: String(renderedArea.totalCols),
     top_margin: '0.25',
     bottom_margin: '0.25',
     left_margin: '0.25',
@@ -272,7 +245,6 @@ function showPdfDialog_(fileUrl, fileName, pageCount, renderSeconds) {
   SpreadsheetApp.getUi().showModalDialog(html, 'Xuất PDF A6 ngang thành công');
 }
 
-
 function createRunContext_() {
   const tz = Session.getScriptTimeZone();
   const printedAt = Utilities.formatDate(new Date(), tz, 'HH:mm dd/MM/yyyy');
@@ -284,12 +256,6 @@ function createRunContext_() {
 
 function formatDateTime_(date) {
   return Utilities.formatDate(date, Session.getScriptTimeZone(), 'yyyyMMdd_HHmmss');
-}
-
-function setCellInBlock_(sheet, blockStartRow, cellA1, value) {
-  const parsed = parseA1_(cellA1);
-  const row = blockStartRow + parsed.row - 1;
-  sheet.getRange(row, parsed.col).setValue(value);
 }
 
 function parseA1_(a1) {
