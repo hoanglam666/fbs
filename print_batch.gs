@@ -148,6 +148,8 @@ function renderBatch_(templateSheet, outSheet, jobs) {
     outSheet.setColumnWidth(c, templateSheet.getColumnWidth(c));
   }
 
+  applyTemplateRowHeights_(templateSheet, outSheet, tplRows, jobs.length);
+
   // Tăng tốc: copy mẫu 1 lần cho toàn bộ vùng đích (Google Sheets tự lặp block mẫu).
   const targetRange = outSheet.getRange(1, 1, totalRows, tplCols);
   tplRange.copyTo(targetRange, SpreadsheetApp.CopyPasteType.PASTE_NORMAL, false);
@@ -158,6 +160,23 @@ function renderBatch_(templateSheet, outSheet, jobs) {
   targetRange.setValues(values);
 
   return { totalRows, totalCols: tplCols };
+}
+
+
+function applyTemplateRowHeights_(templateSheet, outSheet, tplRows, blockCount) {
+  const startRow = templateSheet.getRange(CONFIG.TEMPLATE_RANGE_A1).getRow();
+  const templateHeights = [];
+
+  for (let i = 0; i < tplRows; i += 1) {
+    templateHeights.push(templateSheet.getRowHeight(startRow + i));
+  }
+
+  for (let block = 0; block < blockCount; block += 1) {
+    const outStartRow = block * tplRows + 1;
+    for (let i = 0; i < tplRows; i += 1) {
+      outSheet.setRowHeight(outStartRow + i, templateHeights[i]);
+    }
+  }
 }
 
 function fillTemplateValuesInMemory_(values, blockStartIndex, job) {
