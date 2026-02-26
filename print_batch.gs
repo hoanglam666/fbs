@@ -7,9 +7,9 @@ const CONFIG = {
   OUTPUT_SHEET: 'IN_HANG_LOAT',
   OUTPUT_MIN_ROWS: 30000,
 
-  // Mặc định theo mẫu trong ảnh user gửi: A6 ngang, vùng A1:E11.
-  TEMPLATE_RANGE_A1: 'A1:E11',
-  BLOCK_HEIGHT: 11,
+  // Mặc định theo mẫu hiện tại: A6 ngang, vùng A1:E10 (đã bỏ dòng người in/ngày in).
+  TEMPLATE_RANGE_A1: 'A1:E10',
+  BLOCK_HEIGHT: 10,
 
   // Header aliases để đọc dữ liệu bền vững (không phụ thuộc hoa/thường/dấu/_/space).
   HEADERS: {
@@ -32,8 +32,6 @@ const CONFIG = {
     phanLoai: 'D8',
     sl: 'E8',
     tong: 'E9',
-    nguoiIn: 'B11',
-    ngayIn: 'D11',
   },
 
   PDF: {
@@ -62,11 +60,9 @@ function inHangLoatVaXuatPdf() {
     return;
   }
 
-  const runContext = createRunContext_();
-
   const startedAt = Date.now();
   const out = recreateOutputSheet_(ss, CONFIG.OUTPUT_SHEET);
-  const renderedArea = renderBatch_(templateSheet, out, jobs, runContext);
+  const renderedArea = renderBatch_(templateSheet, out, jobs);
   const renderSeconds = ((Date.now() - startedAt) / 1000).toFixed(2);
 
   const fileName = `${CONFIG.PDF.filePrefix}_${formatDateTime_(new Date())}.pdf`;
@@ -85,11 +81,9 @@ function inHangLoatTheoMau() {
     return;
   }
 
-  const runContext = createRunContext_();
-
   const startedAt = Date.now();
   const out = recreateOutputSheet_(ss, CONFIG.OUTPUT_SHEET);
-  renderBatch_(templateSheet, out, jobs, runContext);
+  renderBatch_(templateSheet, out, jobs);
   const renderSeconds = ((Date.now() - startedAt) / 1000).toFixed(2);
 
   SpreadsheetApp.getUi().alert(
@@ -144,7 +138,7 @@ function buildPrintJobs_() {
   return jobs;
 }
 
-function renderBatch_(templateSheet, outSheet, jobs, runContext) {
+function renderBatch_(templateSheet, outSheet, jobs) {
   const tplRange = templateSheet.getRange(CONFIG.TEMPLATE_RANGE_A1);
   const tplRows = tplRange.getNumRows();
   const tplCols = tplRange.getNumColumns();
@@ -160,13 +154,13 @@ function renderBatch_(templateSheet, outSheet, jobs, runContext) {
 
   // Tăng tốc: ghi dữ liệu động bằng 1 lần setValues thay vì set từng ô.
   const values = targetRange.getValues();
-  jobs.forEach((job, i) => fillTemplateValuesInMemory_(values, i * tplRows, job, runContext));
+  jobs.forEach((job, i) => fillTemplateValuesInMemory_(values, i * tplRows, job));
   targetRange.setValues(values);
 
   return { totalRows, totalCols: tplCols };
 }
 
-function fillTemplateValuesInMemory_(values, blockStartIndex, job, runContext) {
+function fillTemplateValuesInMemory_(values, blockStartIndex, job) {
   setValueInMemory_(values, blockStartIndex, CONFIG.CELLS.maDon, job.maDon);
   setValueInMemory_(values, blockStartIndex, CONFIG.CELLS.supplier, job.supplier);
   setValueInMemory_(values, blockStartIndex, CONFIG.CELLS.maThung, `${job.soTrang} / ${job.tongKien}`);
@@ -175,10 +169,6 @@ function fillTemplateValuesInMemory_(values, blockStartIndex, job, runContext) {
   setValueInMemory_(values, blockStartIndex, CONFIG.CELLS.phanLoai, job.phanLoai);
   setValueInMemory_(values, blockStartIndex, CONFIG.CELLS.sl, job.sl);
   setValueInMemory_(values, blockStartIndex, CONFIG.CELLS.tong, job.sl);
-  if (runContext) {
-    setValueInMemory_(values, blockStartIndex, CONFIG.CELLS.nguoiIn, `Người in: ${runContext.printedBy}`);
-    setValueInMemory_(values, blockStartIndex, CONFIG.CELLS.ngayIn, `Ngày in: ${runContext.printedAt}`);
-  }
 }
 
 function setValueInMemory_(values, blockStartIndex, cellA1, value) {
@@ -257,15 +247,6 @@ function showPdfDialog_(fileUrl, fileName, pageCount, renderSeconds) {
       `</div>`
   ).setWidth(420).setHeight(180);
   SpreadsheetApp.getUi().showModalDialog(html, 'Xuất PDF A6 ngang thành công');
-}
-
-function createRunContext_() {
-  const tz = Session.getScriptTimeZone();
-  const printedAt = Utilities.formatDate(new Date(), tz, 'HH:mm dd/MM/yyyy');
-  const activeUser = Session.getActiveUser().getEmail();
-  const effectiveUser = Session.getEffectiveUser().getEmail();
-  const printedBy = activeUser || effectiveUser || 'Không xác định';
-  return { printedAt, printedBy };
 }
 
 function formatDateTime_(date) {
